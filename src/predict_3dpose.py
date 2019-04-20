@@ -33,9 +33,9 @@ tf.app.flags.DEFINE_boolean("max_norm", False, "Apply maxnorm constraint to the 
 tf.app.flags.DEFINE_boolean("batch_norm", False, "Use batch_normalization")
 
 # Data loading
-tf.app.flags.DEFINE_boolean("predict_14", False, "predict 14 joints")
+tf.app.flags.DEFINE_boolean("predict_14", True, "predict 14 joints")
 tf.app.flags.DEFINE_boolean("use_sh", False, "Use 2d pose predictions from StackedHourglass")
-tf.app.flags.DEFINE_string("action","All", "The action to train on. 'All' means all the actions")
+tf.app.flags.DEFINE_float('train_split', 0.8, 'Proportion of samples assigned to training set')
 
 # Architecture
 tf.app.flags.DEFINE_integer("linear_size", 1024, "Size of each model layer.")
@@ -44,11 +44,10 @@ tf.app.flags.DEFINE_boolean("residual", False, "Whether to add a residual connec
 
 # Evaluation
 tf.app.flags.DEFINE_boolean("procrustes", False, "Apply procrustes analysis at test time")
-tf.app.flags.DEFINE_boolean("evaluateActionWise",False, "The dataset to use either h36m or heva")
 
 # Directories
-tf.app.flags.DEFINE_string("cameras_path","data/h36m/cameras.h5","Directory to load camera parameters")
-tf.app.flags.DEFINE_string("data_dir",   "data/h36m/", "Data directory")
+tf.app.flags.DEFINE_string("data_dir",   "/scratch/sehgal.n/data/synthetic/", "Data directory")
+tf.app.flags.DEFINE_string("h5_file", "data/synthetic/synthetic_annot.h5", "H5 file containing synthetic labels")
 tf.app.flags.DEFINE_string("train_dir", "experiments", "Training directory.")
 
 # Train or load
@@ -62,7 +61,6 @@ tf.app.flags.DEFINE_boolean("use_fp16", False, "Train using fp16 instead of fp32
 FLAGS = tf.app.flags.FLAGS
 
 train_dir = os.path.join( FLAGS.train_dir,
-  FLAGS.action,
   'dropout_{0}'.format(FLAGS.dropout),
   'epochs_{0}'.format(FLAGS.epochs) if FLAGS.epochs > 0 else '',
   'lr_{0}'.format(FLAGS.learning_rate),
@@ -139,19 +137,9 @@ def create_model( session, actions, batch_size ):
   return model
 
 def train():
-  """Train a linear model for 3d pose estimation"""
-
-  actions = data_utils.define_actions( FLAGS.action )
-
-  number_of_actions = len( actions )
-
-  # Load camera parameters
-  SUBJECT_IDS = [1,5,6,7,8,9,11]
-  rcams = cameras.load_cameras(FLAGS.cameras_path, SUBJECT_IDS)
-
   # Load 3d data and load (or create) 2d projections
   train_set_3d, test_set_3d, data_mean_3d, data_std_3d, dim_to_ignore_3d, dim_to_use_3d, train_root_positions, test_root_positions = data_utils.read_3d_data(
-    actions, FLAGS.data_dir, FLAGS.camera_frame, rcams, FLAGS.predict_14 )
+   FLAGS.data_dir, FLAGS.predict_14, FLAGS.h5_file)
 
   # Read stacked hourglass 2D predictions if use_sh, otherwise use groundtruth 2D projections
   if FLAGS.use_sh:
@@ -496,6 +484,8 @@ def sample():
   import matplotlib.gridspec as gridspec
 
   # 1080p	= 1,920 x 1,080
+  import matplotlib as mpl
+  mpl.use('Agg')
   fig = plt.figure( figsize=(19.2, 10.8) )
 
   gs1 = gridspec.GridSpec(5, 9) # 5 rows, 9 columns
@@ -525,7 +515,7 @@ def sample():
     exidx = exidx + 1
     subplot_idx = subplot_idx + 3
 
-  plt.show()
+  plt.savefig('test.png')
 
 def main(_):
   if FLAGS.sample:

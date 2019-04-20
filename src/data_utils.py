@@ -3,6 +3,7 @@
 
 from __future__ import division
 
+import h5py
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,6 +13,7 @@ import viz
 import h5py
 import glob
 import copy
+import pandas as pd
 
 # Human3.6m IDs for training and testing
 TRAIN_SUBJECTS = [1,5,6,7,8]
@@ -56,7 +58,7 @@ SH_NAMES[13] = 'LShoulder'
 SH_NAMES[14] = 'LElbow'
 SH_NAMES[15] = 'LWrist'
 
-def load_data( bpath, subjects, actions, dim=3 ):
+def load_data( bpath, h5_path, dim=3 ):
   """
   Loads 2d ground truth from disk, and puts it in an easy-to-acess dictionary
 
@@ -71,48 +73,19 @@ def load_data( bpath, subjects, actions, dim=3 ):
       There will be 2 entries per subject/action if loading 3d data
       There will be 8 entries per subject/action if loading 2d data
   """
+  annot = {}
+  f = h5py.File(h5_path)
+  tags = list(f.keys())
+  for tag in tags:
+    annot[tag] = np.asarray(f[tag]).copy()
+
+  folder = f.attrs['synthetic_folder'].decode('utf-8')
 
   if not dim in [2,3]:
     raise(ValueError, 'dim must be 2 or 3')
-
-  data = {}
-
-  for subj in subjects:
-    for action in actions:
-
-      print('Reading subject {0}, action {1}'.format(subj, action))
-
-      dpath = os.path.join( bpath, 'S{0}'.format(subj), 'MyPoses/{0}D_positions'.format(dim), '{0}*.h5'.format(action) )
-      print( dpath )
-
-      fnames = glob.glob( dpath )
-
-      loaded_seqs = 0
-      for fname in fnames:
-        seqname = os.path.basename( fname )
-
-        # This rule makes sure SittingDown is not loaded when Sitting is requested
-        if action == "Sitting" and seqname.startswith( "SittingDown" ):
-          continue
-
-        # This rule makes sure that WalkDog and WalkTogeter are not loaded when
-        # Walking is requested.
-        if seqname.startswith( action ):
-          print( fname )
-          loaded_seqs = loaded_seqs + 1
-
-          with h5py.File( fname, 'r' ) as h5f:
-            poses = h5f['{0}D_positions'.format(dim)][:]
-
-          poses = poses.T
-          data[ (subj, action, seqname) ] = poses
-
-      if dim == 2:
-        assert loaded_seqs == 8, "Expecting 8 sequences, found {0} instead".format( loaded_seqs )
-      else:
-        assert loaded_seqs == 2, "Expecting 2 sequences, found {0} instead".format( loaded_seqs )
-
-  return data
+  
+  import pdb; pdb.set_trace()
+  return annot 
 
 
 def load_stacked_hourglass(data_dir, subjects, actions):
@@ -426,15 +399,13 @@ def create_2d_data( actions, data_dir, rcams ):
   return train_set, test_set, data_mean, data_std, dim_to_ignore, dim_to_use
 
 
-def read_3d_data( actions, data_dir, camera_frame, rcams, predict_14=False ):
+def read_3d_data(data_dir, predict_14, h5_file ):
   """
   Loads 3d poses, zero-centres and normalizes them
 
   Args
     actions: list of strings. Actions to load
     data_dir: string. Directory where the data can be loaded from
-    camera_frame: boolean. Whether to convert the data to camera coordinates
-    rcams: dictionary with camera parameters
     predict_14: boolean. Whether to predict only 14 joints
   Returns
     train_set: dictionary with loaded 3d poses for training
@@ -446,13 +417,11 @@ def read_3d_data( actions, data_dir, camera_frame, rcams, predict_14=False ):
     train_root_positions: dictionary with the 3d positions of the root in train
     test_root_positions: dictionary with the 3d positions of the root in test
   """
+  import pdb; pdb.set_trace()
   # Load 3d data
-  train_set = load_data( data_dir, TRAIN_SUBJECTS, actions, dim=3 )
-  test_set  = load_data( data_dir, TEST_SUBJECTS,  actions, dim=3 )
-
-  if camera_frame:
-    train_set = transform_world_to_camera( train_set, rcams )
-    test_set  = transform_world_to_camera( test_set, rcams )
+  train_set, test_set = load_data( data_dir, h5_file, dim=3)
+  # train_set = load_data( data_dir, TRAIN_SUBJECTS, actions, dim=3 )
+  # test_set  = load_data( data_dir, TEST_SUBJECTS,  actions, dim=3 )
 
   # Apply 3d post-processing (centering around root)
   train_set, train_root_positions = postprocess_3d( train_set )
